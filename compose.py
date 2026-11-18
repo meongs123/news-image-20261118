@@ -36,7 +36,7 @@ LAND = (172, 184, 152)
 GRAT = (190, 205, 212)
 
 MAP_X0, MAP_X1 = 16, 1008
-MAP_Y0, MAP_Y1 = 112, 198
+MAP_Y0, MAP_Y1 = 650, 716
 LON0, LON1 = -170.0, 190.0
 LAT0, LAT1 = 72.0, -50.0
 
@@ -133,16 +133,14 @@ PINS = [
     (6, 30.7, 36.9, (28, -14)),  # Antalya (COP31), offset with leader
 ]
 
-# (region, headline, summary, icon, tile colour)
+# (region, headline, summary, icon, tile colour) — the five leads BELOW the
+# hero. The #1 story (U.S.–Iran trade fire) lives in the hero panel above.
 LEADS = [
-    ("M. EAST", "U.S. AND IRAN TRADE FIRE IN THE GULF",
-     "U.S. jets strike a missile site on Qeshm after Iran's third attack on Bahrain in five days.",
-     "jets", (22, 50, 79)),
     ("ASIA", "APEC OPENS IN SHENZHEN",
      "Trump, Xi and Putin meet Thursday in a first-ever three-way summit.",
      "flags", (31, 107, 74)),
     ("TECH", "NVIDIA BEATS; HUANG NOT COMING BACK",
-     "Revenue $115.8B, up 103%; board says it will not reinstate Huang as CEO. SEC opens a probe.",
+     "Revenue $115.8B, up 103%; board won't reinstate Huang as CEO; SEC opens a probe.",
      "chip", (122, 92, 46)),
     ("M. EAST", "KNESSET ELECTS KAHANA AS SPEAKER",
      "Kahana wins 66-52, a blow to Netanyahu; Eisenkot now tries to form a government.",
@@ -281,6 +279,124 @@ ICONS = {"jets": draw_jets, "flags": draw_flags, "chip": draw_chip,
          "bank": draw_bank, "virus": draw_virus, "thermo": draw_thermo}
 
 
+# ---- Hero illustration: the Strait of Hormuz at dusk ----
+# Flat-vector scene, all PIL primitives, fully deterministic. A warship and
+# a second vessel on a dark strait, jets overhead, fire and smoke over the
+# water, a low sun. Drawn inside (hx, hy, hw, hh); sky occupies the top
+# ~58%, sea the rest.
+def _lerp(a, b, t):
+    return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
+
+
+def draw_jet_h(d, x, y, s, flip=False):
+    """Fighter jet in side profile, drawn on a small layer so it can be
+    mirrored cleanly. s = length; flip = faces left."""
+    from PIL import Image
+    layer = Image.new("RGBA", (s + 24, 44), (0, 0, 0, 0))
+    ld = ImageDraw.Draw(layer)
+    w = (242, 242, 236, 255)
+    g = (214, 214, 208, 255)
+    # fuselage: long dart, nose right
+    ld.polygon([(s + 18, 22), (16, 17), (4, 20), (4, 24), (16, 27)],
+               fill=w)
+    # swept wing, down-back
+    ld.polygon([(s // 2 + 8, 23), (s // 2 - 4, 23), (s // 2 - 20, 42),
+                (s // 2 - 8, 42)], fill=g)
+    # tail fin, up-back
+    ld.polygon([(12, 20), (4, 4), (12, 4), (20, 20)], fill=g)
+    # cockpit bump
+    ld.ellipse([s - 14, 17, s - 4, 23], fill=(180, 200, 220, 255))
+    # flame at the tail
+    ld.polygon([(4, 19), (-8, 22), (4, 25)], fill=(255, 210, 63, 255))
+    if flip:
+        layer = layer.transpose(Image.FLIP_LEFT_RIGHT)
+    d._image.paste(layer, (x - 8, y - 22), layer)
+
+
+def draw_blast(d, cx, cy, r):
+    """One explosion sitting on the water: wide orange flame licks, bright
+    core, and a tall smoke column rising up-right (never a round 'sun')."""
+    # flame licks: three overlapping teardrops
+    d.polygon([(cx - r, cy), (cx - r * 0.7, cy - r * 1.1),
+               (cx - r * 0.2, cy - r * 0.5), (cx, cy - r * 1.3),
+               (cx + r * 0.3, cy - r * 0.5), (cx + r * 0.7, cy - r * 1.0),
+               (cx + r, cy), (cx, cy + r * 0.4)], fill=(232, 96, 28))
+    d.ellipse([cx - r * 0.62, cy - r * 0.75, cx + r * 0.62, cy + r * 0.25],
+              fill=(255, 196, 58))
+    d.ellipse([cx - r * 0.32, cy - r * 0.5, cx + r * 0.32, cy + r * 0.2],
+              fill=(255, 236, 150))
+    # smoke column: puffs rising up-right, darker at the base
+    puffs = [(cx + 6, cy - r - 12, 14, (88, 78, 70)),
+             (cx + 20, cy - r - 28, 18, (112, 102, 92)),
+             (cx + 38, cy - r - 46, 22, (136, 126, 114)),
+             (cx + 58, cy - r - 64, 25, (158, 148, 136))]
+    for sx, sy, sr, c in puffs:
+        d.ellipse([sx - sr, sy - sr * 0.7, sx + sr, sy + sr * 0.7], fill=c)
+
+
+def draw_hero(d, hx, hy, hw, hh):
+    horizon = hy + int(hh * 0.58)
+    # sky: crimson -> orange -> gold bands (no sun: the fire is the light)
+    stops = [(168, 42, 30), (214, 84, 40), (238, 138, 58), (246, 186, 104)]
+    sky_h = horizon - hy
+    for i in range(sky_h):
+        t = i / max(sky_h - 1, 1)
+        seg = t * (len(stops) - 1)
+        j = min(int(seg), len(stops) - 2)
+        c = _lerp(stops[j], stops[j + 1], seg - j)
+        d.line([hx, hy + i, hx + hw - 1, hy + i], fill=c)
+    # sea: dark navy with a gold band at the horizon
+    d.rectangle([hx, horizon, hx + hw - 1, hy + hh - 1], fill=(14, 34, 62))
+    d.line([hx, horizon, hx + hw - 1, horizon], fill=(250, 198, 118), width=2)
+    # jets, clear of the smoke: one top-left heading right, one mid-top
+    d.line([hx + 16, hy + 30, hx + 96, hy + 26], fill=(255, 255, 255), width=2)
+    draw_jet_h(d, hx + 96, hy + 26, 74)
+    draw_jet_h(d, hx + 300, hy + 62, 60)
+    # small fire glow on the horizon, mid-left
+    d.ellipse([hx + 168, horizon - 8, hx + 204, horizon + 6], fill=(240, 120, 40))
+    d.ellipse([hx + 178, horizon - 4, hx + 194, horizon + 4], fill=(255, 200, 80))
+    # one big explosion over the second vessel, right
+    draw_blast(d, hx + 500, horizon + 8, 26)
+    # warship, left: hull, superstructure, mast, gun, portholes, wake
+    ship = (36, 42, 54)
+    deck = (50, 58, 72)
+    d.polygon([(hx + 56, horizon + 44), (hx + 236, horizon + 44),
+               (hx + 250, horizon + 56), (hx + 238, horizon + 66),
+               (hx + 66, horizon + 66), (hx + 52, horizon + 56)], fill=ship)
+    d.polygon([(hx + 104, horizon + 44), (hx + 134, horizon + 22),
+               (hx + 196, horizon + 22), (hx + 210, horizon + 44)], fill=deck)
+    d.polygon([(hx + 148, horizon + 22), (hx + 158, horizon + 4),
+               (hx + 182, horizon + 4), (hx + 186, horizon + 22)], fill=deck)
+    d.line([hx + 170, horizon + 4, hx + 170, horizon - 14], fill=ship, width=3)
+    d.line([hx + 158, horizon - 14, hx + 182, horizon - 14], fill=ship, width=3)
+    d.polygon([(hx + 78, horizon + 44), (hx + 96, horizon + 36),
+               (hx + 104, horizon + 44)], fill=deck)
+    for px in (hx + 118, hx + 142, hx + 166, hx + 190, hx + 214):
+        d.ellipse([px - 2, horizon + 52, px + 2, horizon + 56], fill=(255, 210, 100))
+    # wake trailing behind the stern, short
+    for wy in (horizon + 70, horizon + 78):
+        d.line([hx + 12, wy, hx + 56, wy], fill=(120, 160, 195), width=2)
+    # second vessel, right, lighter so it reads on the dark sea
+    d.polygon([(hx + 440, horizon + 52), (hx + 552, horizon + 52),
+               (hx + 560, horizon + 60), (hx + 550, horizon + 68),
+               (hx + 448, horizon + 68), (hx + 436, horizon + 60)],
+              fill=(62, 70, 86))
+    d.polygon([(hx + 478, horizon + 52), (hx + 492, horizon + 38),
+               (hx + 518, horizon + 38), (hx + 526, horizon + 52)],
+              fill=(74, 82, 98))
+    d.line([hx + 502, horizon + 38, hx + 502, horizon + 26], fill=(62, 70, 86), width=2)
+    d.line([hx + 440, horizon + 52, hx + 552, horizon + 52], fill=(200, 210, 220), width=2)
+    for px in (hx + 470, hx + 500, hx + 530):
+        d.ellipse([px - 2, horizon + 58, px + 2, horizon + 62], fill=(255, 210, 100))
+    # a few short wave strokes near the hulls
+    for wx, wy, wl in ((hx + 300, horizon + 84, 70), (hx + 420, horizon + 92, 90)):
+        d.line([wx, wy, wx + wl, wy], fill=(120, 160, 195), width=2)
+    # story-1 badge, top-left of the art
+    d.ellipse([hx + 10, hy + 10, hx + 34, hy + 34], fill=RED,
+              outline=(255, 255, 255), width=2)
+    d.text((hx + 22, hy + 21), "1", font=font(BOLD, 14), fill=(255, 255, 255), anchor="mm")
+
+
 def draw_map(d):
     d.rectangle([MAP_X0, MAP_Y0, MAP_X1, MAP_Y1], fill=OCEAN)
     # graticule every 30 degrees
@@ -297,7 +413,7 @@ def draw_map(d):
     for _name, _label, poly in CONTINENTS:
         pts = [project(lo, la) for lo, la in poly]
         d.polygon(pts, fill=LAND, outline=(140, 152, 122))
-    lab_f = font(BOLD, 11)
+    lab_f = font(BOLD, 10)
     for name, (llo, lla), _poly in CONTINENTS:
         if not name or name == "GREENLAND":
             continue
@@ -316,15 +432,47 @@ def draw_map(d):
         d.text((dx, dy - 1), str(num), font=pin_f, fill=(255, 255, 255), anchor="mm")
 
 
+def draw_lead_card(d, x, y, w, h, num, region, headline, summary, icon, tile,
+                    head_size, head_lh, sum_size, sum_lh):
+    """One lead card. Headline flows first (up to 2 lines); the summary takes
+    whatever lines remain — no overflow, no clipping."""
+    d.rectangle([x, y, x + w, y + h], fill=CARD, outline=BORDER, width=1)
+    d.ellipse([x + 8, y + 8, x + 30, y + 30], fill=RED)
+    d.text((x + 19, y + 18), str(num), font=font(BOLD, 14),
+           fill=(255, 255, 255), anchor="mm")
+    ts = 56 if w < 400 else 60
+    tx, ty = x + 38, y + 8
+    d.rounded_rectangle([tx, ty, tx + ts, ty + ts], radius=6, fill=tile)
+    ICONS[icon](d, tx, ty, ts)
+    tx0 = tx + ts + 10
+    tw = w - (tx0 - x) - 10
+    d.text((tx0, y + 10), region, font=font(BOLD, 12 if w >= 400 else 11), fill=RED)
+    head_f = font(DISPB, head_size)
+    hy = y + 28 if w < 400 else y + 30
+    hlines = wrap(headline, head_f, tw)[:2]
+    for ln in hlines:
+        d.text((tx0, hy), ln, font=head_f, fill=INK)
+        hy += head_lh
+    sum_f = font(REG, sum_size)
+    sy = hy + 4
+    room = (y + h - 4 - sy) // sum_lh
+    slines = wrap(summary, sum_f, tw)[:max(room, 0)]
+    for ln in slines:
+        d.text((tx0, sy), ln, font=sum_f, fill=(60, 60, 58))
+        sy += sum_lh
+    if len(wrap(headline, head_f, tw)) > 2 or room < 1:
+        print("WARN card", num, "headline lines",
+              len(wrap(headline, head_f, tw)), "summary room", room)
+
+
 def main():
     page = Image.new("RGB", (W, H), PAPER)
     d = ImageDraw.Draw(page)
 
     # ---- Masthead ----
-    d.text((W // 2, 8), "THE WORLD IN ONE PAGE", font=font(DISPBLACK, 42),
+    d.text((W // 2, 4), "THE WORLD IN ONE PAGE", font=font(DISPBLACK, 38),
            fill=NAVY, anchor="ma")
-    # Date line: grey date, story counts picked out in red, centered as one unit.
-    date_f = font(BOLD, 16)
+    date_f = font(BOLD, 14)
     segs = [("WEDNESDAY, 18 NOVEMBER 2026  \u00b7  ", GREY),
             ("30 STORIES", RED),
             ("  \u00b7  ", GREY),
@@ -332,52 +480,55 @@ def main():
     total = sum(date_f.getlength(t) for t, _ in segs)
     sx = (W - total) // 2
     for t, c in segs:
-        d.text((sx, 62), t, font=date_f, fill=c)
+        d.text((sx, 54), t, font=date_f, fill=c)
         sx += date_f.getlength(t)
-    d.rectangle([16, 86, W - 16, 90], fill=RED)
-    d.rectangle([16, 93, W - 16, 94], fill=INK)
+    d.rectangle([16, 78, W - 16, 82], fill=RED)
+    d.rectangle([16, 85, W - 16, 86], fill=INK)
+
+    # ---- Hero: Gulf illustration + navy headline panel ----
+    HY0, HY1 = 92, 326
+    draw_hero(d, 16, HY0, 620, HY1 - HY0)
+    d.rectangle([636, HY0, 1008, HY1], fill=NAVY)
+    d.text((660, 106), "M. EAST  \u00b7  STORY 1", font=font(BOLD, 12),
+           fill=(255, 130, 110))
+    d.rectangle([660, 130, 984, 132], fill=(255, 210, 63))
+    hero_head = font(DISPB, 36)
+    hlines = wrap("U.S. AND IRAN TRADE FIRE IN THE GULF", hero_head, 324)
+    hy = 140
+    for ln in hlines:
+        d.text((660, hy), ln, font=hero_head, fill=(255, 255, 255))
+        hy += 41
+    stand_f = font(REG, 15)
+    slines = wrap("U.S. jets strike a missile site on Qeshm after Iran's "
+                  "third attack on Bahrain in five days.", stand_f, 324)
+    sy = hy + 8
+    for ln in slines:
+        d.text((660, sy), ln, font=stand_f, fill=(205, 215, 225))
+        sy += 18
+
+    # ---- The day's other leads: 3 narrow + 2 wide ----
+    ly = 332
+    d.rectangle([16, ly + 3, 24, ly + 11], fill=RED)
+    d.text((32, ly), "THE DAY'S OTHER LEADS", font=font(BOLD, 14), fill=NAVY)
+    d.rectangle([16, ly + 22, W - 16, ly + 24], fill=INK)
+    row1_y, row1_h = 360, 128
+    for i, (region, headline, summary, icon, tile) in enumerate(LEADS[:3]):
+        draw_lead_card(d, 16 + i * 333, row1_y, 325, row1_h, i + 2,
+                       region, headline, summary, icon, tile, 17, 21, 13, 15)
+    row2_y, row2_h = 496, 132
+    for j, (region, headline, summary, icon, tile) in enumerate(LEADS[3:]):
+        draw_lead_card(d, 16 + j * 500, row2_y, 492, row2_h, j + 5,
+                       region, headline, summary, icon, tile, 24, 28, 14, 17)
 
     # ---- Map strip ----
-    d.text((16, 98), "WHERE THE NEWS HAPPENED", font=font(BOLD, 12), fill=GREY)
-    d.text((W - 16, 98), "SIX LEADS, NUMBERED", font=font(BOLD, 12),
+    d.text((16, 634), "WHERE THE NEWS HAPPENED", font=font(BOLD, 12), fill=GREY)
+    d.text((W - 16, 634), "SIX LEADS, NUMBERED", font=font(BOLD, 12),
            fill=RED, anchor="ra")
     draw_map(d)
     d.rectangle([MAP_X0, MAP_Y0, MAP_X1, MAP_Y1], outline=BORDER, width=1)
 
-    # ---- Lead cards: 2 columns x 3 rows ----
-    card_w, card_h, gap = 492, 146, 8
-    y0 = 204
-    for i, (region, headline, summary, icon, tile) in enumerate(LEADS):
-        col, row = i % 2, i // 2
-        x = 16 + col * (card_w + gap)
-        y = y0 + row * (card_h + gap)
-        d.rectangle([x, y, x + card_w, y + card_h], fill=CARD, outline=BORDER, width=1)
-        # number badge
-        d.ellipse([x + 8, y + 8, x + 30, y + 30], fill=RED)
-        d.text((x + 19, y + 18), str(i + 1), font=font(BOLD, 14),
-               fill=(255, 255, 255), anchor="mm")
-        # icon tile
-        tx, ty, ts = x + 40, y + 10, 64
-        d.rounded_rectangle([tx, ty, tx + ts, ty + ts], radius=6, fill=tile)
-        ICONS[icon](d, tx, ty, ts)
-        # text block
-        tx0 = x + 116
-        d.text((tx0, y + 12), region, font=font(BOLD, 12), fill=RED)
-        head_f = font(DISPB, 26)
-        lines = wrap(headline, head_f, card_w - 116 - 12)
-        hy = y + 30
-        for ln in lines[:2]:
-            d.text((tx0, hy), ln, font=head_f, fill=INK)
-            hy += 31
-        sum_f = font(REG, 15)
-        slines = wrap(summary, sum_f, card_w - 116 - 12)
-        sy = hy + 10
-        for ln in slines[:2]:
-            d.text((tx0, sy), ln, font=sum_f, fill=(60, 60, 58))
-            sy += 18
-
     # ---- ALSO list ----
-    ay = 666
+    ay = 722
     d.rectangle([16, ay + 3, 24, ay + 11], fill=RED)
     d.text((32, ay), "ALSO ON THIS PAGE", font=font(BOLD, 14), fill=NAVY)
     d.rectangle([16, ay + 22, W - 16, ay + 24], fill=INK)
@@ -390,29 +541,25 @@ def main():
             d.text((cx, cy), tag, font=tag_f, fill=RED)
             tw = tag_f.getlength(tag) + 8
             d.text((cx + tw, cy), text, font=txt_f, fill=INK)
-            cy += 17
-    d.line([508, ly, 508, ly + 12 * 17 - 4], fill=BORDER, width=1)
+            cy += 16
+    d.line([508, ly, 508, ly + 12 * 16 - 4], fill=BORDER, width=1)
 
-    # ---- BY THE NUMBERS ----
-    ny = 900
-    d.rectangle([16, ny + 3, 24, ny + 11], fill=RED)
-    d.text((32, ny), "BY THE NUMBERS", font=font(BOLD, 14), fill=NAVY)
-    d.rectangle([16, ny + 22, W - 16, ny + 24], fill=INK)
+    # ---- BY THE NUMBERS: dark navy footer band ----
+    ny = 944
+    d.rectangle([16, ny, W - 16, 1006], fill=NAVY)
+    d.rectangle([32, ny + 6, 40, ny + 14], fill=RED)
+    d.text((48, ny + 2), "BY THE NUMBERS", font=font(BOLD, 13),
+           fill=(255, 255, 255))
     cell_w = 246
     for i, (num, label) in enumerate(NUMBERS):
-        cx = 16 + i * cell_w
+        cx = 32 + i * cell_w
         if i:
-            d.line([cx - 8, ny + 30, cx - 8, ny + 30 + 54], fill=BORDER, width=1)
-        d.text((cx, ny + 30), num, font=font(DISPB, 28), fill=NAVY)
-        lab_f = font(REG, 12)
-        llines = wrap(label, lab_f, cell_w - 8)
-        ly2 = ny + 66
-        for ln in llines[:2]:
-            d.text((cx, ly2), ln, font=lab_f, fill=GREY)
-            ly2 += 15
+            d.line([cx - 12, ny + 24, cx - 12, ny + 56], fill=(80, 100, 130), width=1)
+        d.text((cx, ny + 20), num, font=font(DISPB, 24), fill=(255, 255, 255))
+        d.text((cx, ny + 48), label, font=font(REG, 11), fill=(205, 215, 225))
 
     # ---- Source line ----
-    d.text((W // 2, 998),
+    d.text((W // 2, 1008),
            "Sources: AP \u00b7 Reuters \u00b7 AFP \u00b7 BBC \u00b7 Al Jazeera \u00b7 CNN \u00b7 PAHO \u00b7 UNEP \u00b7 UN  \u2014  "
            "Claims marked \u201csays\u201d are unconfirmed. All drawings original.",
            font=font(REG, 11), fill=GREY, anchor="ma")
